@@ -121,10 +121,10 @@
 
 
 
-    - name: Install Python
-      apt:
-        name: python
-        state: present
+    #- name: Install Python
+     # apt:
+      #  name: python
+       # state: present
 
 
     - name: Download get-pip.py

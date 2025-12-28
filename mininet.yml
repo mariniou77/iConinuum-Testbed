@@ -48,10 +48,10 @@
           JRE_HOME=/usr/lib/jvm/java-11-openjdk-amd64/jre
 
 
-    - name: Install Python
-      apt:
-        name: python
-        state: present
+    #- name: Install Python
+     # apt:
+        #name: python
+        #state: present
 
 
     - name: Download get-pip.py
