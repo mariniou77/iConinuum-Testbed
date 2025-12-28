@@ -1,7 +1,7 @@
 ##Installation of Cluster Manager (Kubernetes/k3s) with one master node and two worker nodes as well as  docker, and all the dependencies
 ---
 - name: Install and configure K3s cluster
-  hosts: master,workers
+  hosts: masters,workers
   become: true
   tasks:
     - name: Update package lists
@@ -43,7 +43,7 @@
     - name: Update /etc/hosts file
       lineinfile:
         path: /etc/hosts
-        line: "{{ hostvars[item]['ansible_host'] }} {{ item }}"
+        line: "{{ hostvars[item]['internal_ip'] }} {{ item }}"
         state: present
       with_items: "{{ groups['kubernetes'] }}"
       become: true
@@ -235,7 +235,7 @@
 
     - name: Retrieve IP address of sflow_machine
       set_fact:
-        sflow_ip: "{{ groups['sflow_machine'][0] }}"
+        sflow_ip: "{{ hostvars[groups['sflow_machine'][0]].internal_ip }}"
 
     - name: Debug - Print sflow_machine IP address
       debug:
@@ -250,7 +250,7 @@
 
     - name: Retrieve IP address of onos_machine
       set_fact:
-        mininet_ip: "{{ groups['mininet_machine'][0] }}"
+        mininet_ip: "{{ hostvars[groups['mininet_machine'][0]].internal_ip }}"
 
     - name: Debug - Print mininet_machine IP address
       debug:
@@ -265,11 +265,12 @@
 
 
 - name: Install K3s on master node
-  hosts: master
+  hosts: masters
+  become: true
   tasks:
     - name: Retrieve IP address of tap0 in master node
       set_fact:
-        tap0_ip: "{{ groups['master_tap0'][0] }}"
+        tap0_ip: "{{ hostvars[inventory_hostname]['tap0_ip'] }}"
 
     - name: Debug - Print tap0 IP address including the subnet mask in master node
       debug:
@@ -309,10 +310,11 @@
 
 - name: Install K3s on worker1
   hosts: worker1
+  become: true
   tasks:
     - name: Retrieve IP address of tap0 in worker1 node
       set_fact:
-        tap0_ip: "{{ groups['worker1_tap0'][0] }}"
+        tap0_ip: "{{ hostvars[inventory_hostname]['tap0_ip'] }}"
 
     - name: Debug - Print tap0 IP address including the subnet mask in worker1
       debug:
@@ -340,19 +342,22 @@
         var: master_ip
 
     - name: Join worker1 to the cluster
-      shell: curl -sfL https://get.k3s.io | K3S_URL=https://{{master_ip}}:6443 K3S_TOKEN={{ hostvars['master']['k3s_token'] }} INSTALL_K3S_EXEC="--node-ip={{tap0_ip_address}} --flannel-iface=tap0" sh -
+      shell: curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars['master']['internal_ip'] }}:6443 K3S_TOKEN={{ hostvars['master']['k3s_token'] }} INSTALL_K3S_EXEC="--node-ip={{tap0_ip_address}} --flannel-iface=tap0" sh -
 
 
 
 - name: Configure all Kubernetes nodes to send data to sFlow-RT collector
-  hosts: master
+  hosts: masters
+  become: true
   tasks:
+    - name: Get home directory of the user
+      shell: "getent passwd {{ ansible_user }} | cut -d: -f6"
+      register: user_home
+
     - name: Create host-sflow.yml file
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../host-sflow.yml.j2"
         dest: "{{ user_home.stdout }}/host-sflow.yml"
-      vars:
-        user_home: "{{ lookup('env', 'HOME') }}"
 
     - name: Deploy host-sflow.yml file
       shell: kubectl apply -f host-sflow.yml
@@ -364,8 +369,6 @@
       ansible.builtin.template:
         src: deployment.yml.j2
         dest: "{{ user_home.stdout }}/deployment.yml"
-      vars:
-        user_home: "{{ lookup('env', 'HOME') }}"
 
     - name: Deploy deployment.yml file
       shell: kubectl apply -f  deployment.yml
@@ -375,7 +378,7 @@
 
     - name: Retrieve IP address of tap0 in worker1 node
       set_fact:
-        tap0_ip_worker1: "{{ groups['worker1_tap0'][0] }}"
+        tap0_ip_worker1: "{{ hostvars['worker1']['tap0_ip'] }}"
 
 
     - name: Split tap0 ip address from the subnet mask to extract IP address

@@ -12,14 +12,14 @@ sleep 5
 
 #Create gre tunnel between a mininet switch and kubernetes master/worker node
 echo "creating gre tunnel between a mininet switche and kubernetes master/worker node"
-sudo ovs-vsctl add-port s1 int1 -- set Interface int1 type=gre options:remote_ip={{hostvars['master']['ansible_host']}}
+sudo ovs-vsctl add-port s1 int1 -- set Interface int1 type=gre options:remote_ip={{hostvars['master']['internal_ip']}}
 echo ""
 
-sudo ovs-vsctl add-port s2 int2 -- set Interface int2 type=gre options:remote_ip={{hostvars['worker1']['ansible_host']}}
+sudo ovs-vsctl add-port s2 int2 -- set Interface int2 type=gre options:remote_ip={{hostvars['worker1']['internal_ip']}}
 echo ""
 
 
 #Send data of the switch interface in the mininet to the monitoring tool (sFlow-RT)
 echo "sending data of the switch interface in the mininet to the monitoring tool (sFlow-RT)"
-sudo ovs-vsctl -- --id=@sflow create sflow agent=eno1 target="{{sflow_ip}}\:6343" header=128 sampling=64 polling=10 -- set bridge s1 sflow=@sflow
-sudo ovs-vsctl -- --id=@sflow create sflow agent=eno1 target="{{sflow_ip}}\:6343" header=128 sampling=64 polling=10 -- set bridge s2 sflow=@sflow
+sudo ovs-vsctl -- --id=@sflow create sflow agent=ens4 target="{{sflow_ip}}\:6343" header=128 sampling=64 polling=10 -- set bridge s1 sflow=@sflow
+sudo ovs-vsctl -- --id=@sflow create sflow agent=ens4 target="{{sflow_ip}}\:6343" header=128 sampling=64 polling=10 -- set bridge s2 sflow=@sflow
