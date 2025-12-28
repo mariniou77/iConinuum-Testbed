@@ -89,7 +89,7 @@
 
 
     - name: Clone Mininet
-      command: git clone https://github.com/mininet/mininet /home/ubuntu/mininet
+      command: git clone https://github.com/mininet/mininet "{{ user_home.stdout }}/mininet"
 
 
     - name: Install Mininet
@@ -170,7 +170,7 @@
 
     - name: Retrieve IP address of sflow_machine
       set_fact:
-        sflow_ip: "{{ groups['sflow_machine'][0] }}"
+        sflow_ip: "{{ hostvars[groups['sflow_machine'][0]].internal_ip }}"
 
     - name: Debug - Print sflow_machine IP address
       debug:
@@ -181,17 +181,15 @@
       ansible.builtin.template:
         src: "{{ example_folder }}/example.py.j2"
         dest: "{{ user_home.stdout }}/example.py"
-      vars:
-        user_home: "{{ lookup('env', 'HOME') }}"
 
 
     - name: Debug - Print inventory file
       debug:
-        msg: "{{ lookup('file', '{{ example_folder }}/inventory.ini') }}"
+        msg: "{{ lookup('file', example_folder + '/inventory.ini') }}"
 
     - name: Retrieve IP address of onos_machine
       set_fact:
-        onos_ip: "{{ groups['onos_machine'][0] }}"
+        onos_ip: "{{ hostvars[groups['onos_machine'][0]].internal_ip }}"
 
     - name: Debug - Print onos_machine IP address
       debug:
@@ -220,12 +218,11 @@
       ansible.builtin.template:
         src: "{{ example_folder }}/topology.sh.j2"
         dest: "{{ user_home.stdout }}/topology.sh"
-      vars:
-        user_home: "{{ lookup('env', 'HOME') }}"
 
     - name: Configure permission to the topology file
-      shell: chmod +x topology.sh
-
+      ansible.builtin.file:
+        path: "{{ user_home.stdout }}/topology.sh"
+        mode: "u+rwx,g+rx,o+rx"
 
     - name: Start topology in the background
       shell: "nohup {{ user_home.stdout }}/topology.sh > /dev/null 2>&1 &"
