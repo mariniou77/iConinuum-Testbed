@@ -24,6 +24,7 @@
         - make
         - terminator
         - openjdk-11-jdk
+        - openjdk-17-jre-headless
         - git
         - git-review
         - zip
@@ -44,8 +45,8 @@
       lineinfile:
         dest: /etc/environment
         line: |
-          JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-          JRE_HOME=/usr/lib/jvm/java-11-openjdk-amd64/jre
+          JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          JRE_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 
     #- name: Install Python
@@ -88,8 +89,11 @@
         state: present
 
 
-    - name: Clone Mininet
-      command: git clone https://github.com/mininet/mininet "{{ user_home.stdout }}/mininet"
+    - name: Clone/Update Mininet
+      ansible.builtin.git:
+        repo: https://github.com/mininet/mininet
+        dest: "{{ user_home.stdout }}/mininet"
+        update: yes
 
 
     - name: Install Mininet
@@ -150,18 +154,33 @@
         - dashboard-example
 
 
-    - name: Install Java
-      apt:
-        name: openjdk-11-jre-headless
-        state: present
+    #- name: Install Java
+      #apt:
+        #name: openjdk-11-jre-headless
+        #state: present
 
     - name: Debug - Before starting sFlow-RT
       debug:
         msg: "About to start sFlow-RT script"
 
-    - name: Start sFlow-RT in the background
-      shell: "nohup {{ user_home.stdout }}/sflow-rt/start.sh > /dev/null 2>&1 &"
+    - name: Stop any existing sFlow-RT
+      shell: pkill -f '[s]flowrt\.jar' || true
+      args:
+        executable: /bin/bash
+      failed_when: false
+      changed_when: false
 
+    - name: Start sFlow-RT in the background (Java 17)
+      shell: |
+        JAVA17=/usr/lib/jvm/java-17-openjdk-amd64
+        nohup env JAVA_HOME="$JAVA17" PATH="$JAVA17/bin:$PATH" {{ user_home.stdout }}/sflow-rt/start.sh > {{ user_home.stdout }}/sflow-rt/sflow-rt.out 2>&1 &
+
+    - name: Wait for sFlow-RT REST API
+      wait_for:
+        host: 127.0.0.1
+        port: 8008
+        delay: 2
+        timeout: 60
 
     - name: Debug - After starting sFlow-RT
       debug:
@@ -181,6 +200,9 @@
       ansible.builtin.template:
         src: "{{ example_folder }}/example.py.j2"
         dest: "{{ user_home.stdout }}/example.py"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
 
 
     - name: Debug - Print inventory file
@@ -218,6 +240,9 @@
       ansible.builtin.template:
         src: "{{ example_folder }}/topology.sh.j2"
         dest: "{{ user_home.stdout }}/topology.sh"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
 
     - name: Configure permission to the topology file
       ansible.builtin.file:
