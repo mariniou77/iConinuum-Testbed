@@ -35,7 +35,6 @@
         - python3-pip
         - default-jdk
         - python3
-       
 
     - name: Ping all hosts
       ping:
@@ -170,7 +169,7 @@
         name: pip
         state: latest
         executable: pip3
-    
+
 
     - name: Ensure Docker service is running
       service:
@@ -187,20 +186,6 @@
         append: yes
       become: true
 
-    - name: Allow incoming traffic to port 6443
-      ufw:
-        rule: allow
-        port: 6443
-        proto: tcp
-      become: true
-
-    - name: Allow incoming traffic to port 443
-      ufw:
-        rule: allow
-        port: 443
-        proto: tcp
-      become: true
-
 
     - name: Install openvswitch-switch package
       become: yes
@@ -211,7 +196,7 @@
 
     - name: Delete OVS bridge br1 if it exists
       become: yes
-      shell: ovs-vsctl del-br br1
+      shell: ovs-vsctl --if-exists del-br br1
       ignore_errors: true
 
     - name: Create OVS bridge br1
@@ -224,13 +209,21 @@
 
     - name: Add port tap0 to bridge br1
       become: yes
-      shell: ovs-vsctl add-port br1 tap0 -- set Interface tap0 type=internal
-      
+      shell: ovs-vsctl --may-exist add-port br1 tap0 -- set Interface tap0 type=internal
+
 
     - name: Bring up tap0 interface
       become: yes
       shell: ip link set tap0 up
 
+    - name: Ensure ufw is installed (so ufw module never fails)
+      apt:
+        name: ufw
+        state: present
+
+    - name: Disable ufw (recommended for K3s; rely on GCP VPC firewall rules)
+      ufw:
+        state: disabled
 
 
     - name: Retrieve IP address of sflow_machine
@@ -241,11 +234,11 @@
       debug:
         var: sflow_ip
 
+    - name: Configure sFlow on br1 (idempotent-ish)
+      shell: |
+        ovs-vsctl --if-exists clear bridge br1 sflow
+        ovs-vsctl -- --id=@sflow create sflow agent=tap0 target=\"{{ sflow_ip }}:6343\" header=128 sampling=64 polling=10 -- set bridge br1 sflow=@sflow
 
-
-    - name: Create sFlow agent on the OVS bridges on all the nodes in the Kubernetes Cluster
-      become: yes
-      shell: ovs-vsctl -- --id=@sflow create sflow agent=tap0 target="{{sflow_ip}}\:6343" header=128 sampling=64 polling=10 -- set bridge br1 sflow=@sflow
 
 
     - name: Retrieve IP address of onos_machine
@@ -257,11 +250,10 @@
         var: mininet_ip
 
 
-    - name: Add port tap1 to bridge br1 with GRE tunnel to ONOS
-      become: yes
-      command: ovs-vsctl add-port br1 tap1 -- set Interface tap1 type=gre options:remote_ip={{ mininet_ip }}
-
-
+    - name: Add/ensure GRE port tap1 on br1 towards Mininet VM
+      shell: |
+        ovs-vsctl --may-exist add-port br1 tap1
+        ovs-vsctl set interface tap1 type=gre options:remote_ip={{ mininet_ip }}
 
 
 - name: Install K3s on master node
@@ -278,7 +270,7 @@
 
     - name: Set IP address on tap0 interface
       become: yes
-      command: ip addr add {{tap0_ip}} dev tap0
+      command: ip addr replace {{tap0_ip}} dev tap0
 
     - name: Split tap0 ip address from the subnet mask to extract IP address
       set_fact:
@@ -322,7 +314,7 @@
 
     - name: Set IP address on tap0 interface
       become: yes
-      command: ip addr add {{tap0_ip}} dev tap0
+      command: ip addr replace {{tap0_ip}} dev tap0
 
     - name: Split tap0 ip address from the subnet mask to extract IP address
       set_fact:
@@ -360,7 +352,7 @@
         dest: "{{ user_home.stdout }}/host-sflow.yml"
 
     - name: Deploy host-sflow.yml file
-      shell: kubectl apply -f host-sflow.yml
+      shell: kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml apply -f {{ user_home.stdout }}/host-sflow.yml
       become: yes
 
 
@@ -371,7 +363,7 @@
         dest: "{{ user_home.stdout }}/deployment.yml"
 
     - name: Deploy deployment.yml file
-      shell: kubectl apply -f  deployment.yml
+      shell: kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml apply -f {{ user_home.stdout }}/deployment.yml
       become: yes
 
 
